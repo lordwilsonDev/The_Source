@@ -1,0 +1,85 @@
+## Deployment Script: `deploy_qoracle.sh`
+
+```bash
+#!/bin/bash
+# deploy_qoracle.sh – Build and deploy the Sovereign Q‑Oracle to Cloud Run
+# Usage: ./deploy_qoracle.sh [PROJECT_ID] [SERVICE_NAME] [REGION]
+
+set -e  # exit on error
+
+# Configuration
+PROJECT_ID="${1:-$(gcloud config get-value project)}"
+SERVICE_NAME="${2:-q-oracle-service}"
+REGION="${3:-us-central1}"
+IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}:latest"
+
+# Ensure we're in the right directory (where Dockerfile and code reside)
+cd "$(dirname "$0")"
+
+echo "🚀 Deploying Q‑Oracle to Cloud Run"
+echo "   Project:  $PROJECT_ID"
+echo "   Service:  $SERVICE_NAME"
+echo "   Region:   $REGION"
+echo "   Image:    $IMAGE_NAME"
+echo ""
+
+# Step 1: Build the Docker image
+echo "📦 Building Docker image..."
+docker build -t $IMAGE_NAME .
+
+# Step 2: Push to Google Container Registry
+echo "⬆️ Pushing image to GCR..."
+docker push $IMAGE_NAME
+
+# Step 3: Deploy to Cloud Run
+echo "☁️ Deploying to Cloud Run..."
+gcloud run deploy $SERVICE_NAME \
+    --image $IMAGE_NAME \
+    --platform managed \
+    --region $REGION \
+    --project $PROJECT_ID \
+    --allow-unauthenticated=false \
+    --set-env-vars="Q_ORACLE_AUDIENCE=https://${SERVICE_NAME}-${PROJECT_ID}.${REGION}.run.app" \
+    --memory=2Gi \
+    --cpu=2 \
+    --concurrency=80 \
+    --timeout=300
+
+# Step 4: Get the service URL
+SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --project $PROJECT_ID --format='value(status.url)')
+echo ""
+echo "✅ Deployment complete!"
+echo "🔗 Service URL: $SERVICE_URL"
+echo ""
+echo "📝 Next steps:"
+echo "   1. Update your local ~/vortex_config.env with:"
+echo "      Q_ORACLE_URL=$SERVICE_URL"
+echo "      Q_ORACLE_AUDIENCE=$SERVICE_URL"
+echo "   2. Grant the Tool Planner's service account permission to invoke this service:"
+echo "      gcloud run services add-iam-policy-binding $SERVICE_NAME \\"
+echo "          --region $REGION \\"
+echo "          --project $PROJECT_ID \\"
+echo "          --member 'serviceAccount:YOUR_SERVICE_ACCOUNT@$PROJECT_ID.iam.gserviceaccount.com' \\"
+echo "          --role 'roles/run.invoker'"
+echo ""
+echo "🎯 Ready for the First Pulse."
+```
+
+### Important Notes
+- The script assumes you have `gcloud` installed and authenticated, and Docker is available.
+- It pushes to Google Container Registry (GCR). If you prefer Artifact Registry, adjust the image name accordingly.
+- The deployment uses `--allow-unauthenticated=false` to keep the service private. Only authenticated requests with a valid IAM token from a service account that has the `run.invoker` role will be accepted.
+- The `Q_ORACLE_AUDIENCE` environment variable is set to the service URL itself, which is the expected audience for token verification.
+
+### Prerequisites
+- Google Cloud project with billing enabled.
+- Cloud Run API enabled: `gcloud services enable run.googleapis.com`
+- Appropriate permissions: `roles/run.admin`, `roles/storage.admin` (for pushing images), and `roles/iam.serviceAccountUser` (if using a specific service account).
+- Docker installed and configured.
+
+### After Deployment
+Run the Tool Planner orchestrator with the updated environment variables. It will obtain an identity token from the default service account (or the one pointed to by `GOOGLE_APPLICATION_CREDENTIALS`) and invoke the private Cloud Run service. The first successful response will mark the official "First Pulse" of the Sovereign Stack.
+
+---
+
+Would you like me to also provide a companion script to set up the necessary IAM service account and permissions, or is this sufficient for the handover?
