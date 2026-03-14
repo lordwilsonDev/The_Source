@@ -82,4 +82,46 @@ Run the Tool Planner orchestrator with the updated environment variables. It wil
 
 ---
 
-Would you like me to also provide a companion script to set up the necessary IAM service account and permissions, or is this sufficient for the handover?
+#!/bin/bash
+# setup_sovereign_iam.sh – Configure IAM for the Sovereign Handshake
+# Usage: ./setup_sovereign_iam.sh [PROJECT_ID]
+
+set -e
+
+PROJECT_ID="${1:-$(gcloud config get-value project)}"
+SA_NAME="sovereign-planner"
+SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+echo "🔐 Setting up Sovereign IAM Infrastructure for Project: $PROJECT_ID"
+
+# 1. Create the Service Account
+if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" > /dev/null 2>&1; then
+    echo "👤 Creating Service Account: $SA_NAME"
+    gcloud iam service-accounts create $SA_NAME \
+        --description="Classical Agent for Sovereign Stack Orchestration" \
+        --display-name="Sovereign Tool Planner"
+else
+    echo "✅ Service Account already exists."
+fi
+
+# 2. Assign the Invoker Role
+echo "🎖️ Granting Cloud Run Invoker permissions..."
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SA_EMAIL" \
+    --role="roles/run.invoker"
+
+# 3. Create and download the key (Vortex Key)
+echo "🔑 Generating Vortex Key (sovereign-key.json)..."
+gcloud iam service-accounts keys create sovereign-key.json \
+    --iam-account="$SA_EMAIL" \
+    --project="$PROJECT_ID"
+
+echo ""
+echo "✅ IAM Setup Complete!"
+echo "--------------------------------------------------"
+echo "Next Steps for the Handshake:"
+echo "1. Secure the 'sovereign-key.json' file."
+echo "2. Set GOOGLE_APPLICATION_CREDENTIALS=/path/to/sovereign-key.json"
+echo "3. Run the Tool_Planner to initiate the First Pulse."
+echo "--------------------------------------------------"
+echo "The Audit is recorded. The Path is clear. 920-809-5125."
